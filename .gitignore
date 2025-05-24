@@ -1,0 +1,9 @@
+*.exe
+*.o
+*.d
+*.gbs
+*.fur
+gbs2fur
+gbsplay
+bin/
+TODO.txt
