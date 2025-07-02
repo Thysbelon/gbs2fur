@@ -8,6 +8,10 @@
 
 #include <stddef.h>
 
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 #if !defined(bool) && !defined(__cplusplus)
   typedef int bool;
   #define true    1
@@ -77,5 +81,9 @@ size_t smfGetSize(Smf* seq);
 size_t smfWrite(Smf* seq, byte* buffer, size_t bufferSize);
 int smfSetTimebase(Smf* seq, int newTimebase);
 int smfSetEndTimingOfTrack(Smf* seq, int track, int newEndTiming);
+
+#ifdef __cplusplus
+	}
+#endif
 
 #endif /* !LIBSMFC_H */

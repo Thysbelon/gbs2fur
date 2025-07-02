@@ -42,6 +42,10 @@
 #define SMF_META_SEQUENCENAME       0x03
 #define SMF_META_SETTEMPO           0x51
 
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 bool smfWriteFile(Smf* seq, const char* filename);
 bool smfInsertNoteOff(Smf* seq, int time, int channel, int track, int key, int velocity);
 bool smfInsertNoteOn(Smf* seq, int time, int channel, int track, int key, int velocity);
@@ -59,5 +63,9 @@ bool smfInsertGM1SystemOn(Smf* seq, int time, int port, int track);
 bool smfInsertMasterVolume(Smf* seq, int time, int port, int track, int volume);
 bool smfInsertTempo(Smf* seq, int time, int track, int microSeconds);
 bool smfInsertTempoBPM(Smf* seq, int time, int track, double bpm);
+
+#ifdef __cplusplus
+	}
+#endif
 
 #endif /* !LIBSMFCX_H */
