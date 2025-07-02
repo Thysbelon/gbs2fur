@@ -15,4 +15,4 @@
 
 #include "gb_chip_state.hpp"
 
-bool songData2fur(std::vector<gb_chip_state>& songData, std::string outfilename, uint16_t inPatLen = 64, bool disablePanMute = false, float inTicksPerSecond = 59.7);
+bool songData2midi(std::vector<gb_chip_state>& songData, float inGBframesPerSecond, std::string outfilename);

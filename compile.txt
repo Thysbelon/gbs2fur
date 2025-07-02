@@ -1,4 +1,4 @@
 linux:
-g++ -o bin/gbs2fur main.cpp to_fur.cpp from_gbsplay.cpp
+g++ -fpermissive -I./libsmf/ -o bin/gbs2fur main.cpp to_fur.cpp from_gbsplay.cpp to_midi.cpp libsmf/libsmfc.c libsmf/libsmfcx.c
 windows:
-x86_64-w64-mingw32-g++ -o bin/gbs2fur main.cpp to_fur.cpp from_gbsplay.cpp
+x86_64-w64-mingw32-g++ -fpermissive -I./libsmf/ -o bin/gbs2fur main.cpp to_fur.cpp from_gbsplay.cpp to_midi.cpp libsmf/libsmfc.c libsmf/libsmfcx.c

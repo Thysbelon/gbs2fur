@@ -14,14 +14,15 @@ This file contains the code that converts gbsplay's output to gb_chip_state obje
 #include <variant>
 #include <algorithm> // std::find
 #include <map>
+#include <chrono> // for measuring performance
 
 #include "gb_chip_state.hpp"
 
 #include "from_gbsplay.hpp"
 
 bool gbsplayStdout2songData(std::vector<gb_chip_state>& songData, std::string gbsFileName, int subsongNum, const uint32_t QUANTIZER, int timeInSeconds){
+auto start = std::chrono::high_resolution_clock::now();
 
-// TODO: split off all code specifically related to gbsplay into its own function. Doing this would make it easier to implement a vgm-converting mode alongside the current gbs-converting mode. Both functions should eventually return a completed songData.
 #ifdef WIN32
 std::string progPrefix = ".\\";
 std::string progSuffix = ".exe";
@@ -168,7 +169,7 @@ while (fgets(line, sizeof(line), gbsplayFile)){
 	uint64_t curFramesPassed = cyclesPassed / QUANTIZER;
 	if (curFramesPassed > framesPassed) {
 		uint64_t frameDifference = curFramesPassed - framesPassed;
-		if (frameDifference>1) printf("frameDifference: %lu\n", frameDifference);
+		//if (frameDifference>1) printf("frameDifference: %lu\n", frameDifference);
 		for (int i=0; i<frameDifference-1; i++) {
 			songData.push_back(gb_chip_state{});
 		}
@@ -188,93 +189,94 @@ for (struct gb_chip_state i: songData){
 */
 
 // replace undefined values with valid values from previous frames.
-for (int i=0; i<songData.size(); i++){
-	for (int i2=i-1; i2 > -1; i2--){
-		if (songData[i].gb_square1_state.sweep_speed.second==false && songData[i2].gb_square1_state.sweep_speed.second==true) {
-			songData[i].gb_square1_state.sweep_speed=songData[i2].gb_square1_state.sweep_speed;
-			songData[i].gb_square1_state.sweep_up_or_down=songData[i2].gb_square1_state.sweep_up_or_down;
-			songData[i].gb_square1_state.sweep_shift=songData[i2].gb_square1_state.sweep_shift;
-		}
-		if (songData[i].gb_square1_state.duty_cycle.second==false && songData[i2].gb_square1_state.duty_cycle.second==true) {
-			songData[i].gb_square1_state.duty_cycle=songData[i2].gb_square1_state.duty_cycle;
-			songData[i].gb_square1_state.sound_length=songData[i2].gb_square1_state.sound_length;
-		}
-		if (songData[i].gb_square1_state.env_start_vol.second==false && songData[i2].gb_square1_state.env_start_vol.second==true) {
-			songData[i].gb_square1_state.env_start_vol=songData[i2].gb_square1_state.env_start_vol;
-			songData[i].gb_square1_state.env_down_or_up=songData[i2].gb_square1_state.env_down_or_up;
-			songData[i].gb_square1_state.env_length=songData[i2].gb_square1_state.env_length;
-		}
-		if (songData[i].gb_square1_state.pitchLSB.second==false && songData[i2].gb_square1_state.pitchLSB.second==true) {
-			songData[i].gb_square1_state.pitchLSB=songData[i2].gb_square1_state.pitchLSB;
-		}
-		if (songData[i].gb_square1_state.sound_length_enable.second==false && songData[i2].gb_square1_state.sound_length_enable.second==true) {
-			songData[i].gb_square1_state.sound_length_enable=songData[i2].gb_square1_state.sound_length_enable;
-			songData[i].gb_square1_state.pitchMSB=songData[i2].gb_square1_state.pitchMSB;
-		}
-		if (songData[i].gb_square1_state.panning.second==false && songData[i2].gb_square1_state.panning.second==true) {
-			songData[i].gb_square1_state.panning=songData[i2].gb_square1_state.panning;
-		}
-		
-		if (songData[i].gb_square2_state.duty_cycle.second==false && songData[i2].gb_square2_state.duty_cycle.second==true) {
-			songData[i].gb_square2_state.duty_cycle=songData[i2].gb_square2_state.duty_cycle;
-			songData[i].gb_square2_state.sound_length=songData[i2].gb_square2_state.sound_length;
-		}
-		if (songData[i].gb_square2_state.env_start_vol.second==false && songData[i2].gb_square2_state.env_start_vol.second==true) {
-			songData[i].gb_square2_state.env_start_vol=songData[i2].gb_square2_state.env_start_vol;
-			songData[i].gb_square2_state.env_down_or_up=songData[i2].gb_square2_state.env_down_or_up;
-			songData[i].gb_square2_state.env_length=songData[i2].gb_square2_state.env_length;
-		}
-		if (songData[i].gb_square2_state.pitchLSB.second==false && songData[i2].gb_square2_state.pitchLSB.second==true) {
-			songData[i].gb_square2_state.pitchLSB=songData[i2].gb_square2_state.pitchLSB;
-		}
-		if (songData[i].gb_square2_state.sound_length_enable.second==false && songData[i2].gb_square2_state.sound_length_enable.second==true) {
-			songData[i].gb_square2_state.sound_length_enable=songData[i2].gb_square2_state.sound_length_enable;
-			songData[i].gb_square2_state.pitchMSB=songData[i2].gb_square2_state.pitchMSB;
-		}
-		if (songData[i].gb_square2_state.panning.second==false && songData[i2].gb_square2_state.panning.second==true) {
-			songData[i].gb_square2_state.panning=songData[i2].gb_square2_state.panning;
-		}
-		
-		if (songData[i].gb_wave_state.sound_length.second==false && songData[i2].gb_wave_state.sound_length.second==true) {
-			songData[i].gb_wave_state.sound_length=songData[i2].gb_wave_state.sound_length;
-		}
-		if (songData[i].gb_wave_state.volume.second==false && songData[i2].gb_wave_state.volume.second==true) {
-			songData[i].gb_wave_state.volume=songData[i2].gb_wave_state.volume;
-		}
-		if (songData[i].gb_wave_state.pitchLSB.second==false && songData[i2].gb_wave_state.pitchLSB.second==true) {
-			songData[i].gb_wave_state.pitchLSB=songData[i2].gb_wave_state.pitchLSB;
-		}
-		if (songData[i].gb_wave_state.sound_length_enable.second==false && songData[i2].gb_wave_state.sound_length_enable.second==true) {
-			songData[i].gb_wave_state.sound_length_enable=songData[i2].gb_wave_state.sound_length_enable;
-			songData[i].gb_wave_state.pitchMSB=songData[i2].gb_wave_state.pitchMSB;
-		}
-		if (songData[i].gb_wave_state.panning.second==false && songData[i2].gb_wave_state.panning.second==true) {
-			songData[i].gb_wave_state.panning=songData[i2].gb_wave_state.panning;
-		}
-		if (songData[i].gb_wave_state.wavetable.second==false && songData[i2].gb_wave_state.wavetable.second==true) {
-			songData[i].gb_wave_state.wavetable=songData[i2].gb_wave_state.wavetable;
-		}
-		
-		if (songData[i].gb_noise_state.sound_length.second==false && songData[i2].gb_noise_state.sound_length.second==true) {
-			songData[i].gb_noise_state.sound_length=songData[i2].gb_noise_state.sound_length;
-		}
-		if (songData[i].gb_noise_state.env_start_vol.second==false && songData[i2].gb_noise_state.env_start_vol.second==true) {
-			songData[i].gb_noise_state.env_start_vol=songData[i2].gb_noise_state.env_start_vol;
-			songData[i].gb_noise_state.env_down_or_up=songData[i2].gb_noise_state.env_down_or_up;
-			songData[i].gb_noise_state.env_length=songData[i2].gb_noise_state.env_length;
-		}
-		if (songData[i].gb_noise_state.noise_long_or_short.second==false && songData[i2].gb_noise_state.noise_long_or_short.second==true) {
-			songData[i].gb_noise_state.noise_long_or_short=songData[i2].gb_noise_state.noise_long_or_short;
-			songData[i].gb_noise_state.noise_pitch=songData[i2].gb_noise_state.noise_pitch;
-		}
-		if (songData[i].gb_noise_state.sound_length_enable.second==false && songData[i2].gb_noise_state.sound_length_enable.second==true) {
-			songData[i].gb_noise_state.sound_length_enable=songData[i2].gb_noise_state.sound_length_enable;
-		}
-		if (songData[i].gb_noise_state.panning.second==false && songData[i2].gb_noise_state.panning.second==true) {
-			songData[i].gb_noise_state.panning=songData[i2].gb_noise_state.panning;
-		}
+for (int i=1; i<songData.size(); i++){
+	if (songData[i].gb_square1_state.sweep_speed.second==false && songData[i-1].gb_square1_state.sweep_speed.second==true) {
+		songData[i].gb_square1_state.sweep_speed=songData[i-1].gb_square1_state.sweep_speed;
+		songData[i].gb_square1_state.sweep_up_or_down=songData[i-1].gb_square1_state.sweep_up_or_down;
+		songData[i].gb_square1_state.sweep_shift=songData[i-1].gb_square1_state.sweep_shift;
+	}
+	if (songData[i].gb_square1_state.duty_cycle.second==false && songData[i-1].gb_square1_state.duty_cycle.second==true) {
+		songData[i].gb_square1_state.duty_cycle=songData[i-1].gb_square1_state.duty_cycle;
+		songData[i].gb_square1_state.sound_length=songData[i-1].gb_square1_state.sound_length;
+	}
+	if (songData[i].gb_square1_state.env_start_vol.second==false && songData[i-1].gb_square1_state.env_start_vol.second==true) {
+		songData[i].gb_square1_state.env_start_vol=songData[i-1].gb_square1_state.env_start_vol;
+		songData[i].gb_square1_state.env_down_or_up=songData[i-1].gb_square1_state.env_down_or_up;
+		songData[i].gb_square1_state.env_length=songData[i-1].gb_square1_state.env_length;
+	}
+	if (songData[i].gb_square1_state.pitchLSB.second==false && songData[i-1].gb_square1_state.pitchLSB.second==true) {
+		songData[i].gb_square1_state.pitchLSB=songData[i-1].gb_square1_state.pitchLSB;
+	}
+	if (songData[i].gb_square1_state.sound_length_enable.second==false && songData[i-1].gb_square1_state.sound_length_enable.second==true) {
+		songData[i].gb_square1_state.sound_length_enable=songData[i-1].gb_square1_state.sound_length_enable;
+		songData[i].gb_square1_state.pitchMSB=songData[i-1].gb_square1_state.pitchMSB;
+	}
+	if (songData[i].gb_square1_state.panning.second==false && songData[i-1].gb_square1_state.panning.second==true) {
+		songData[i].gb_square1_state.panning=songData[i-1].gb_square1_state.panning;
+	}
+	
+	if (songData[i].gb_square2_state.duty_cycle.second==false && songData[i-1].gb_square2_state.duty_cycle.second==true) {
+		songData[i].gb_square2_state.duty_cycle=songData[i-1].gb_square2_state.duty_cycle;
+		songData[i].gb_square2_state.sound_length=songData[i-1].gb_square2_state.sound_length;
+	}
+	if (songData[i].gb_square2_state.env_start_vol.second==false && songData[i-1].gb_square2_state.env_start_vol.second==true) {
+		songData[i].gb_square2_state.env_start_vol=songData[i-1].gb_square2_state.env_start_vol;
+		songData[i].gb_square2_state.env_down_or_up=songData[i-1].gb_square2_state.env_down_or_up;
+		songData[i].gb_square2_state.env_length=songData[i-1].gb_square2_state.env_length;
+	}
+	if (songData[i].gb_square2_state.pitchLSB.second==false && songData[i-1].gb_square2_state.pitchLSB.second==true) {
+		songData[i].gb_square2_state.pitchLSB=songData[i-1].gb_square2_state.pitchLSB;
+	}
+	if (songData[i].gb_square2_state.sound_length_enable.second==false && songData[i-1].gb_square2_state.sound_length_enable.second==true) {
+		songData[i].gb_square2_state.sound_length_enable=songData[i-1].gb_square2_state.sound_length_enable;
+		songData[i].gb_square2_state.pitchMSB=songData[i-1].gb_square2_state.pitchMSB;
+	}
+	if (songData[i].gb_square2_state.panning.second==false && songData[i-1].gb_square2_state.panning.second==true) {
+		songData[i].gb_square2_state.panning=songData[i-1].gb_square2_state.panning;
+	}
+	
+	if (songData[i].gb_wave_state.sound_length.second==false && songData[i-1].gb_wave_state.sound_length.second==true) {
+		songData[i].gb_wave_state.sound_length=songData[i-1].gb_wave_state.sound_length;
+	}
+	if (songData[i].gb_wave_state.volume.second==false && songData[i-1].gb_wave_state.volume.second==true) {
+		songData[i].gb_wave_state.volume=songData[i-1].gb_wave_state.volume;
+	}
+	if (songData[i].gb_wave_state.pitchLSB.second==false && songData[i-1].gb_wave_state.pitchLSB.second==true) {
+		songData[i].gb_wave_state.pitchLSB=songData[i-1].gb_wave_state.pitchLSB;
+	}
+	if (songData[i].gb_wave_state.sound_length_enable.second==false && songData[i-1].gb_wave_state.sound_length_enable.second==true) {
+		songData[i].gb_wave_state.sound_length_enable=songData[i-1].gb_wave_state.sound_length_enable;
+		songData[i].gb_wave_state.pitchMSB=songData[i-1].gb_wave_state.pitchMSB;
+	}
+	if (songData[i].gb_wave_state.panning.second==false && songData[i-1].gb_wave_state.panning.second==true) {
+		songData[i].gb_wave_state.panning=songData[i-1].gb_wave_state.panning;
+	}
+	if (songData[i].gb_wave_state.wavetable.second==false && songData[i-1].gb_wave_state.wavetable.second==true) {
+		songData[i].gb_wave_state.wavetable=songData[i-1].gb_wave_state.wavetable;
+	}
+	
+	if (songData[i].gb_noise_state.sound_length.second==false && songData[i-1].gb_noise_state.sound_length.second==true) {
+		songData[i].gb_noise_state.sound_length=songData[i-1].gb_noise_state.sound_length;
+	}
+	if (songData[i].gb_noise_state.env_start_vol.second==false && songData[i-1].gb_noise_state.env_start_vol.second==true) {
+		songData[i].gb_noise_state.env_start_vol=songData[i-1].gb_noise_state.env_start_vol;
+		songData[i].gb_noise_state.env_down_or_up=songData[i-1].gb_noise_state.env_down_or_up;
+		songData[i].gb_noise_state.env_length=songData[i-1].gb_noise_state.env_length;
+	}
+	if (songData[i].gb_noise_state.noise_long_or_short.second==false && songData[i-1].gb_noise_state.noise_long_or_short.second==true) {
+		songData[i].gb_noise_state.noise_long_or_short=songData[i-1].gb_noise_state.noise_long_or_short;
+		songData[i].gb_noise_state.noise_pitch=songData[i-1].gb_noise_state.noise_pitch;
+	}
+	if (songData[i].gb_noise_state.sound_length_enable.second==false && songData[i-1].gb_noise_state.sound_length_enable.second==true) {
+		songData[i].gb_noise_state.sound_length_enable=songData[i-1].gb_noise_state.sound_length_enable;
+	}
+	if (songData[i].gb_noise_state.panning.second==false && songData[i-1].gb_noise_state.panning.second==true) {
+		songData[i].gb_noise_state.panning=songData[i-1].gb_noise_state.panning;
 	}
 }
 
+auto stop = std::chrono::high_resolution_clock::now();
+auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+printf("gbsplayStdout2songData: %ld milliseconds.\n", duration.count());
 return true;
 }

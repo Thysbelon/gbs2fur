@@ -1,5 +1,8 @@
 /*
 This file contains the code that converts songData to a furnace tracker file.
+
+TODO: 
+- Write more functions to get rid of copy-pasted code.
 */
 
 #include <cstdint>
@@ -297,8 +300,8 @@ public:
 		uint8_t nullTerminator = 0;
 		fwrite(&nullTerminator,1,1,outfile);
 	}
-	void writeFurFile(FILE* outfile){
-		outfile = fopen("outfile.fur", "wb");
+	void writeFurFile(FILE* outfile, std::string outfilename){
+		outfile = fopen(outfilename.c_str(), "wb");
 		
 		uint8_t emptyBytes[128];
 		memset(emptyBytes, 0, 128);
@@ -539,14 +542,14 @@ struct envAndSoundLen{
 			sound_length_enable == other.sound_length_enable;
 	}
 };
-bool compareEnvAndSoundLenExceptVol(envAndSoundLen firstIn, envAndSoundLen secondIn){
+static bool compareEnvAndSoundLenExceptVol(envAndSoundLen firstIn, envAndSoundLen secondIn){
 	envAndSoundLen temp1 = firstIn;
 	envAndSoundLen temp2 = secondIn;
 	temp1.env_start_vol=0;
 	temp2.env_start_vol=0;
 	return temp1 == temp2;
 }
-bool isInsSettingInVector(std::vector<struct envAndSoundLen>* uniqueInsSettings, envAndSoundLen* curInsSetting){ // TODO: see if this function can be replaced with an std function now that envAndSoundLen has a == operator.
+static bool isInsSettingInVector(std::vector<struct envAndSoundLen>* uniqueInsSettings, envAndSoundLen* curInsSetting){ // TODO: see if this function can be replaced with an std function now that envAndSoundLen has a == operator.
 	for (envAndSoundLen curUniqueSetting : *uniqueInsSettings){
 		if ( curUniqueSetting == *curInsSetting ) {
 			return true;
@@ -554,7 +557,7 @@ bool isInsSettingInVector(std::vector<struct envAndSoundLen>* uniqueInsSettings,
 	}
 	return false;
 }
-std::tuple<envAndSoundLen, envAndSoundLen, envAndSoundLen> gbChipState2envAndSoundLen(gb_chip_state curState){
+static std::tuple<envAndSoundLen, envAndSoundLen, envAndSoundLen> gbChipState2envAndSoundLen(gb_chip_state curState){
 	envAndSoundLen curSettingsSq1;
 	curSettingsSq1.sound_length = curState.gb_square1_state.sound_length.first;
 	curSettingsSq1.env_start_vol = curState.gb_square1_state.env_start_vol.first;
@@ -576,22 +579,22 @@ std::tuple<envAndSoundLen, envAndSoundLen, envAndSoundLen> gbChipState2envAndSou
 	
 	return std::make_tuple(curSettingsSq1, curSettingsSq2, curSettingsNoi);
 }
-int closest(std::vector<uint16_t> const& vec, int value) { // https://stackoverflow.com/questions/8647635/elegant-way-to-find-closest-value-in-a-vector-from-above
+static int closest(std::vector<uint16_t> const& vec, int value) { // https://stackoverflow.com/questions/8647635/elegant-way-to-find-closest-value-in-a-vector-from-above
 	auto const it = std::lower_bound(vec.begin(), vec.end(), value);
 	if (it == vec.end()) { return -1; }
 	return *it;
 }
-int closest(std::vector<uint8_t> const& vec, int value) { // https://stackoverflow.com/questions/8647635/elegant-way-to-find-closest-value-in-a-vector-from-above
+static int closest(std::vector<uint8_t> const& vec, int value) { // https://stackoverflow.com/questions/8647635/elegant-way-to-find-closest-value-in-a-vector-from-above
 	auto const it = std::lower_bound(vec.begin(), vec.end(), value);
 	if (it == vec.end()) { return -1; }
 	return *it;
 }
-int closest(std::vector<float> const& vec, float value) { // https://stackoverflow.com/questions/8647635/elegant-way-to-find-closest-value-in-a-vector-from-above
+static int closest(std::vector<float> const& vec, float value) { // https://stackoverflow.com/questions/8647635/elegant-way-to-find-closest-value-in-a-vector-from-above
 	auto const it = std::lower_bound(vec.begin(), vec.end(), value);
 	if (it == vec.end()) { return -1; }
 	return *it;
 }
-std::pair<uint8_t, uint8_t> gbPitch2noteAndPitch(uint16_t gbPitch){ // NOTE: C2 in furnace seems to be equivalent to C3 in the sound table. https://www.devrs.com/gb/files/sndtab.html
+static std::pair<uint8_t, uint8_t> gbPitch2noteAndPitch(uint16_t gbPitch){ // NOTE: C2 in furnace seems to be equivalent to C3 in the sound table. https://www.devrs.com/gb/files/sndtab.html
 	//uint32_t frequency = 131072/(2048-gbPitch);
 	// gbPitch = (-131072 / freq) + 2048
 	uint8_t note;
@@ -615,23 +618,36 @@ std::pair<uint8_t, uint8_t> gbPitch2noteAndPitch(uint16_t gbPitch){ // NOTE: C2 
 		if (gbPitchArrayIndex <= 0) {
 			pitchAdjust = 0x80;
 		} else {
+			/*
 			uint16_t totalSemitoneDiff = gbPitchArray[gbPitchArrayIndex] - gbPitchArray[gbPitchArrayIndex-1];
 			pitchAdjust = 0x80 - (float)0x80 * ((float)std::abs(pitchDifference) / totalSemitoneDiff);
+			*/
+			
+			// NOTE: the closest() function above picks the closest value numerically, but that doesn't mean it picks the closest note melodically. The function prefers outputting "C-4 E504" instead of something more readable like "B-3 E584" (from KDL2 title wav channel). The below "pitchAdjustAlter" math corrects the output to something more readable.
+			uint16_t totalSemitoneDiff = gbPitchArray[gbPitchArrayIndex] - gbPitchArray[gbPitchArrayIndex-1];
+			int pitchAdjustAlter = (float)0x80 * ((float)std::abs(pitchDifference) / totalSemitoneDiff);
+			if (pitchAdjustAlter > (0x80 / 2)) { // TODO: make this check possible to disable on the command line.
+				note--;
+				//pitchAdjust = 0x100 - pitchAdjustAlter;
+				pitchAdjust = 0xFF - pitchAdjustAlter;
+			} else {
+				pitchAdjust = 0x80 - pitchAdjustAlter;
+			}
+			
 		}
 	} else {
 		pitchAdjust = 0x80;
 	}
-	
 	return std::make_pair(note, pitchAdjust);
 }
-float noisePitch2frequency(uint8_t noisePitch){
+static float noisePitch2frequency(uint8_t noisePitch){
 	uint8_t s = (noisePitch & 0xF0)>>4;
 	float r = noisePitch & 7;
 	if (r==0) {r=0.5;}
 	uint32_t squaredVal = std::pow(2, s+1);
 	return (float)524288 / r / (float)squaredVal;
 }
-uint8_t noisePitch2note(uint8_t noisePitch){ // https://github.com/tildearrow/furnace/blob/16920e0e3176787e7684d2643271f4ed89c8a395/src/engine/platform/gb.cpp#L152
+static uint8_t noisePitch2note(uint8_t noisePitch){ // https://github.com/tildearrow/furnace/blob/16920e0e3176787e7684d2643271f4ed89c8a395/src/engine/platform/gb.cpp#L152
 	/*
 	for long noise:
 	C0 through c sharp negative 5 are all the same. They are all FF22 == 00.
@@ -697,12 +713,51 @@ uint8_t noisePitch2note(uint8_t noisePitch){ // https://github.com/tildearrow/fu
 	
 	return retNote;
 }
-void writeVar(std::pair<uint8_t, bool>& inVar, uint8_t inVal){
+static void writeVar(std::pair<uint8_t, bool>& inVar, uint8_t inVal){
 	inVar.first=inVal;
 	inVar.second=true;
 	return;
 }
-bool songData2fur(std::vector<gb_chip_state>& songData, uint16_t inPatLen, bool disablePanMute, float inTicksPerSecond){
+static void pushPatternsToFile(furFileClass::patternClass& curSQ1Pat, furFileClass::patternClass& curSQ2Pat, furFileClass::patternClass& curWavPat, furFileClass::patternClass& curNoiPat, furFileClass& furFile, uint32_t& prevPatsSize, uint16_t& patIndex){
+	curSQ1Pat.channel=0;
+	curSQ2Pat.channel=1;
+	curWavPat.channel=2;
+	curNoiPat.channel=3;
+	
+	curSQ1Pat.patIndex=patIndex;
+	curSQ2Pat.patIndex=patIndex;
+	curWavPat.patIndex=patIndex;
+	curNoiPat.patIndex=patIndex;
+	
+	curSQ1Pat.size=curSQ1Pat.calculateSize();
+	curSQ2Pat.size=curSQ2Pat.calculateSize();
+	curWavPat.size=curWavPat.calculateSize();
+	curNoiPat.size=curNoiPat.calculateSize();
+	
+	// calculate pattern pointers. TODO: replace instruments.size() with songInfo.insCount (and do same with wavetables)?
+	furFile.songInfo.patPointers.push_back(/*furFile.songInfo.size*/ 0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
+	prevPatsSize += curSQ1Pat.size+4+4;
+	furFile.songInfo.patPointers.push_back(0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
+	prevPatsSize += curSQ2Pat.size+4+4;
+	furFile.songInfo.patPointers.push_back(0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
+	prevPatsSize += curWavPat.size+4+4;
+	furFile.songInfo.patPointers.push_back(0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
+	prevPatsSize += curNoiPat.size+4+4;
+	
+	patIndex++;
+	std::array<uint8_t, 4/*gameboy channels*/> newOrder = {(uint8_t)patIndex, (uint8_t)patIndex, (uint8_t)patIndex, (uint8_t)patIndex};
+	furFile.songInfo.orders.push_back(newOrder);
+	
+	furFile.patterns.push_back(curSQ1Pat);
+	furFile.patterns.push_back(curSQ2Pat);
+	furFile.patterns.push_back(curWavPat);
+	furFile.patterns.push_back(curNoiPat);
+	curSQ1Pat={};
+	curSQ2Pat={};
+	curWavPat={};
+	curNoiPat={};
+}
+bool songData2fur(std::vector<gb_chip_state>& songData, std::string outfilename, uint16_t inPatLen, bool disablePanMute, float inTicksPerSecond){
 	const uint8_t NOTEOFF=180;
 	
 	furFileClass furFile;
@@ -779,7 +834,7 @@ bool songData2fur(std::vector<gb_chip_state>& songData, uint16_t inPatLen, bool 
 		curInsFeatureGB.envLen = curInsSetting.env_length;
 		curInsFeatureGB.envDirection = curInsSetting.env_down_or_up;
 		curInsFeatureGB.envVol = curInsSetting.env_start_vol;
-		curInsFeatureGB.soundLen = curInsSetting.sound_length_enable ? curInsSetting.sound_length : 64;
+		curInsFeatureGB.soundLen = curInsSetting.sound_length_enable ? (63 - curInsSetting.sound_length) : 64; // "The higher the length timer, the shorter the time before the channel is cut.". Furnace reverses this to make it more intuitive. furnace sound length 1 == gb sound length 62. for non-wave channels. Furnace ignores wave channel sound length
 		curInsFeature.featureData = curInsFeatureGB;
 		curIns.features.push_back(curInsFeature);
 		//curIns.size; 
@@ -1237,86 +1292,13 @@ bool songData2fur(std::vector<gb_chip_state>& songData, uint16_t inPatLen, bool 
 			curWavPat.patData.push_back(jumpPatRow);
 			curNoiPat.patData.push_back(jumpPatRow);
 			
-			// TODO: remove copy pasted code
-			curSQ1Pat.channel=0;
-			curSQ2Pat.channel=1;
-			curWavPat.channel=2;
-			curNoiPat.channel=3;
-			
-			curSQ1Pat.patIndex=patIndex;
-			curSQ2Pat.patIndex=patIndex;
-			curWavPat.patIndex=patIndex;
-			curNoiPat.patIndex=patIndex;
-			
-			curSQ1Pat.size=curSQ1Pat.calculateSize();
-			curSQ2Pat.size=curSQ2Pat.calculateSize();
-			curWavPat.size=curWavPat.calculateSize();
-			curNoiPat.size=curNoiPat.calculateSize();
-			
-			// calculate pattern pointers. TODO: replace instruments.size() with songInfo.insCount (and do same with wavetables)?
-			furFile.songInfo.patPointers.push_back(/*furFile.songInfo.size*/ 0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
-			prevPatsSize += curSQ1Pat.size+4+4;
-			furFile.songInfo.patPointers.push_back(0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
-			prevPatsSize += curSQ2Pat.size+4+4;
-			furFile.songInfo.patPointers.push_back(0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
-			prevPatsSize += curWavPat.size+4+4;
-			furFile.songInfo.patPointers.push_back(0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
-			prevPatsSize += curNoiPat.size+4+4;
-			
-			patIndex++;
-			std::array<uint8_t, 4/*gameboy channels*/> newOrder = {(uint8_t)patIndex, (uint8_t)patIndex, (uint8_t)patIndex, (uint8_t)patIndex};
-			furFile.songInfo.orders.push_back(newOrder);
-			
-			furFile.patterns.push_back(curSQ1Pat);
-			furFile.patterns.push_back(curSQ2Pat);
-			furFile.patterns.push_back(curWavPat);
-			furFile.patterns.push_back(curNoiPat);
-			curSQ1Pat={};
-			curSQ2Pat={};
-			curWavPat={};
-			curNoiPat={};
+			pushPatternsToFile(curSQ1Pat, curSQ2Pat, curWavPat, curNoiPat, furFile, prevPatsSize, patIndex);
 			continue;
 		}
 		
 		// creates a new pattern when we run out of space in the current pattern.
 		if (curSQ1Pat.patData.size()>=furFile.songInfo.patLen){ // if one pat is out of space, they should all be out of space.
-			curSQ1Pat.channel=0;
-			curSQ2Pat.channel=1;
-			curWavPat.channel=2;
-			curNoiPat.channel=3;
-			
-			curSQ1Pat.patIndex=patIndex;
-			curSQ2Pat.patIndex=patIndex;
-			curWavPat.patIndex=patIndex;
-			curNoiPat.patIndex=patIndex;
-			
-			curSQ1Pat.size=curSQ1Pat.calculateSize();
-			curSQ2Pat.size=curSQ2Pat.calculateSize();
-			curWavPat.size=curWavPat.calculateSize();
-			curNoiPat.size=curNoiPat.calculateSize();
-			
-			// calculate pattern pointers. TODO: replace instruments.size() with songInfo.insCount (and do same with wavetables)?
-			furFile.songInfo.patPointers.push_back(/*furFile.songInfo.size*/ 0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
-			prevPatsSize += curSQ1Pat.size+4+4;
-			furFile.songInfo.patPointers.push_back(0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
-			prevPatsSize += curSQ2Pat.size+4+4;
-			furFile.songInfo.patPointers.push_back(0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
-			prevPatsSize += curWavPat.size+4+4;
-			furFile.songInfo.patPointers.push_back(0 + furFile.instruments.size()*(furFile.instruments[0].size+4+4) + furFile.wavetables.size()*(furFile.wavetables[0].size+4+4) + prevPatsSize + 15*3 + 40);
-			prevPatsSize += curNoiPat.size+4+4;
-			
-			patIndex++;
-			std::array<uint8_t, 4/*gameboy channels*/> newOrder = {(uint8_t)patIndex, (uint8_t)patIndex, (uint8_t)patIndex, (uint8_t)patIndex}; // silences narrowing warning
-			furFile.songInfo.orders.push_back(newOrder);
-			
-			furFile.patterns.push_back(curSQ1Pat);
-			furFile.patterns.push_back(curSQ2Pat);
-			furFile.patterns.push_back(curWavPat);
-			furFile.patterns.push_back(curNoiPat);
-			curSQ1Pat={};
-			curSQ2Pat={};
-			curWavPat={};
-			curNoiPat={};
+			pushPatternsToFile(curSQ1Pat, curSQ2Pat, curWavPat, curNoiPat, furFile, prevPatsSize, patIndex);
 		}
 	}
 	furFile.songInfo.patCount = furFile.patterns.size();
@@ -1344,7 +1326,7 @@ bool songData2fur(std::vector<gb_chip_state>& songData, uint16_t inPatLen, bool 
 	
 	
 	FILE* outfile;
-	furFile.writeFurFile(outfile);
+	furFile.writeFurFile(outfile, outfilename);
 	
 	return true;
 }

@@ -1,0 +1,3 @@
+- write a GameBoy LV2 music plug-in (that changes its parameters in response to specific MIDI CCs) to go with the midi output mode
+- Add a function to convert from vgm to songData
+- rewrite all of this in Zig?
