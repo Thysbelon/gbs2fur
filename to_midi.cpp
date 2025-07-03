@@ -1,9 +1,21 @@
 /*
 This file contains the code that converts songData to a midi file.
 
-NOTE:
-I think this is finished for now.
-TODO: write the game boy LV2 plugin to go with this. Use LMMS's freeboy as a reference.
+TODO: 
+- write the game boy LV2 plugin to go with this. Use LMMS's freeboy as a reference.
+
+info on sysex data structure:
+All wave data is stored in a single sysex message at the beginning of the song.
+The wave data consists of values from 0x00 to 0x0F.
+each wave is labelled with an index. "0x10" is index 0, "0x11" is index 1, etc.
+example of a sysex message that contains two waves:
+F0
+10 0F 0F 0F 0F 0F 0D 0B 08 05 03 01 00 00 00 00 00 00 00 00 00 00 01 03 05 08 0B 0D 0F 0F 0F 0F 0F 
+11 00 00 00 00 00 00 00 00 00 00 00 00 0F 0F 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0F 0F 00 00 
+F7
+(line breaks added.)
+
+Throughout the song, the index of the current wave to use will be selected with CC21
 */
 
 #include <cstdint>
@@ -157,11 +169,12 @@ bool songData2midi(std::vector<gb_chip_state>& songData, float inGBframesPerSeco
 	}
 	
 	const int SECONDS_IN_A_MINUTE=60;
-	const int MIDI_BPM=240;
-	const int MIDI_PPQN=960;
+	//const int MIDI_BPM=240;
+	const int MIDI_BPM=120;
+	const int MIDI_PPQN=0x7fff; // max is 0x7fff. TODO: lower this value? Currently: midiTicksPerGBframe = 16. We don't want that value to be a small number like 1 or 2, because that's the result of rounding, so the speed of the song will sound off.
 	Smf* midiFile = smfCreate();
 	smfSetTimebase(midiFile, MIDI_PPQN); // timebase should be high to make adjusting the song easy.
-	smfInsertTempoBPM(midiFile, 0, 0, MIDI_BPM);
+	//smfInsertTempoBPM(midiFile, 0, 0, MIDI_BPM);
 	// MASTER_CLOCK / (CYCLES_PER_FRAME / FRAME_DIVIDER) = number of quantized gb frames in a second
 	// tempo of midi file will always be 120 bpm
 	// 960 is the number of ticks in each quarter note. tempo is 120 bpm, 120 / 60 = 2 beats/quarter notes a second. PPQN * (bpm / SECONDS_IN_A_MINUTE) = ticks per second. 960 * 2 = 1920 ticks per second.
@@ -173,19 +186,46 @@ bool songData2midi(std::vector<gb_chip_state>& songData, float inGBframesPerSeco
 	printf("midiTicksPerGBframe: %lu\n", midiTicksPerGBframe);
 	const uint64_t midiTicksPerSoundLenTick = round((float)midiTicksPerSecond / 256);
 	
-	/*
+	
 	std::set<std::array<uint8_t,32>> uniqueWavetables;
 	
-	// add wavetables to fur
-	for (std::array<uint8_t,32> curWavetable : uniqueWavetables) {
-		furFileClass::wavetableClass curFurWave;
-		for (int i=0; i<32; i++){
-			curFurWave.wavetableData.push_back(curWavetable[i]);
-		}
-		curFurWave.size = curFurWave.calculateSize();
-		furFile.wavetables.push_back(curFurWave);
+	/*
+	for (gb_chip_state curState : songData){ // when there are more inGBframesPerSecond, more garbage waves are captured.
+		if(curState.gb_wave_state.wavetable.second) uniqueWavetables.insert(curState.gb_wave_state.wavetable.first);
 	}
 	*/
+	for (int i=0; i<songData.size(); i++){ // when there are more inGBframesPerSecond, more garbage waves are captured. TODO: consider changing "i++" to "i+=4" or something similar to reduce the number of garbage waves captured; take care to make sure valid waves are still captured.
+		if(songData[i].gb_wave_state.wavetable.second) uniqueWavetables.insert(songData[i].gb_wave_state.wavetable.first);
+	}
+	
+	/*
+	for (std::array<uint8_t,32> curWavetable : uniqueWavetables) {
+		for (int i=0; i<32; i++){
+			printf("%02X ", curWavetable[i]);
+		}
+		printf("\n");
+	}
+	*/
+	
+	// add wavetables to fur. TODO: make most of these sysex variables temporary; they aren't needed after the sysex data has been written to the midi.
+	unsigned int sysexDataSize = 2 /* start and end bytes */ + 33 * uniqueWavetables.size();
+	uint8_t sysexData[sysexDataSize];
+	sysexData[0]=0xF0;
+	unsigned int sysexWaveIndex=0;
+	unsigned int sysexDataIndex=0;
+	for (std::array<uint8_t,32> curWavetable : uniqueWavetables) {
+		sysexDataIndex = 1+sysexWaveIndex*33;
+		if (sysexDataIndex >= sysexDataSize) {fprintf(stderr, "out of range (1)! %u >= %u\n", sysexDataIndex, sysexDataSize);}
+		sysexData[sysexDataIndex]=0x10+sysexWaveIndex;
+		for (int i=0; i<32; i++){
+			sysexDataIndex = 1+sysexWaveIndex*33+1+i;
+			if (sysexDataIndex >= sysexDataSize) {fprintf(stderr, "out of range (2)! %u >= %u\n", sysexDataIndex, sysexDataSize);}
+			sysexData[sysexDataIndex]=curWavetable[i];
+		}
+		sysexWaveIndex++;
+	}
+	sysexData[sysexDataSize-1]=0xF7;
+	smfInsertSysex(midiFile, 0 /* time */, 0 /* port */, 2 /* wave track */, sysexData, sysexDataSize);
 		
 	uint8_t prevWavetableIndex=0xFF;
 	uint8_t prevWaveVol=0x0F;
@@ -216,15 +256,16 @@ bool songData2midi(std::vector<gb_chip_state>& songData, float inGBframesPerSeco
 		//std::tuple<envAndSoundLen, envAndSoundLen, envAndSoundLen> curInsSettings = gbChipState2envAndSoundLen(curState);
 		//printf("curInsSettings (sq2): %u, %u, %u, %u, %u\n", std::get<1>(curInsSettings).sound_length, std::get<1>(curInsSettings).env_start_vol, std::get<1>(curInsSettings).env_down_or_up, std::get<1>(curInsSettings).env_length, std::get<1>(curInsSettings).sound_length_enable);
 		
-		//if (curState.gb_wave_state.wavetable.second) {
-		//	uint8_t wavetableIndex = std::distance(std::begin(uniqueWavetables), uniqueWavetables.find(curState.gb_wave_state.wavetable.first));
-		//	if (wavetableIndex != prevWavetableIndex) {
-		//		/*insert wave change into pattern*/
-		//		writeVar(curWavPatRow.effects[2],0x10);
-		//		writeVar(curWavPatRow.effectVal[2],wavetableIndex);
-		//		prevWavetableIndex = wavetableIndex;
-		//	}
-		//}
+		if (curState.gb_wave_state.wavetable.second) {
+			uint8_t wavetableIndex = std::distance(std::begin(uniqueWavetables), uniqueWavetables.find(curState.gb_wave_state.wavetable.first));
+			if (wavetableIndex != prevWavetableIndex) {
+				/*insert wave change into pattern*/
+				//writeVar(curWavPatRow.effects[2],0x10);
+				//writeVar(curWavPatRow.effectVal[2],wavetableIndex);
+				smfInsertControl(midiFile, midiTicksPassed, 2, 2, 21, wavetableIndex /* if there are more than 127 waves, this will break, but this is unlikely */);
+				prevWavetableIndex = wavetableIndex;
+			}
+		}
 		
 		// panning
 		if (curState.gb_square1_state.panning.second) {

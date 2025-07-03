@@ -805,7 +805,7 @@ bool songData2fur(std::vector<gb_chip_state>& songData, std::string outfilename,
 	/*
 	for (std::array<uint8_t,32> curWavetable : uniqueWavetables) {
 		for (int i=0; i<32; i++){
-			printf("%u ", curWavetable[i]);
+			printf("%02X ", curWavetable[i]);
 		}
 		printf("\n");
 	}
